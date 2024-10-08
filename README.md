@@ -1,4 +1,4 @@
-# rgun-build-aws-cross-account-role-01
+# Cross-Account Role Setup for GitLab Runner in AWS
 
 
 
@@ -33,152 +33,64 @@ The JSON file defines parameters that will be injected into the CloudFormation s
 }
 ```
 
-In this example:
-
-VpcCidr, SubnetCidr, InstanceType, and KeyName are the parameters that will be passed to the CloudFormation stack.
 
 
-##  Updated CloudFormation Templates 
-Network Stack (network-stack.yml)
-Updated to accept parameters:
+This guide explains how to configure cross-account roles for a GitLab runner in your DevOps AWS account to deploy resources in two different AWS accounts: **Account A (Development)** and **Account B (Production)**.
 
-```
-AWSTemplateFormatVersion: '2010-09-09'
-Parameters:
-  VpcCidr:
-    Description: "The CIDR block for the VPC"
-    Type: String
-    Default: "10.0.0.0/16"
-  SubnetCidr:
-    Description: "The CIDR block for the subnet"
-    Type: String
-    Default: "10.0.1.0/24"
+## Steps Overview
 
-Resources:
-  MyVPC:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: !Ref VpcCidr
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      Tags:
-        - Key: Name
-          Value: MyVPC
+1. **Create IAM Roles** in Account A (Development) and Account B (Production).
+2. **Configure Trust Relationship** for each role to allow the GitLab runner to assume the roles.
+3. **Create an IAM Policy** in the DevOps account to allow the GitLab runner to assume the roles in Account A and Account B.
+4. **Update the GitLab CI/CD pipeline** to assume the correct roles during deployment.
+5. **Test the deployment** in both Account A and Account B.
 
-  MySubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref MyVPC
-      CidrBlock: !Ref SubnetCidr
-      AvailabilityZone: !Select [ 0, !GetAZs ]
-      Tags:
-        - Key: Name
-          Value: MySubnet
-```
+## Step 1: Create IAM Roles in Account A (Development) and Account B (Production)
 
-## Application Stack (app-stack.yml)
-Updated to accept parameters:
+### 1.1: Create IAM Role in Account A (Development)
 
-```
-AWSTemplateFormatVersion: '2010-09-09'
-Parameters:
-  InstanceType:
-    Description: "EC2 instance type"
-    Type: String
-    Default: "t2.micro"
-  KeyName:
-    Description: "KeyPair name for SSH access"
-    Type: AWS::EC2::KeyPair::KeyName
-    Default: "my-keypair"
+1. Log in to **Account A (Development)** via the AWS Management Console.
+2. Navigate to **IAM > Roles** and create a new role.
+3. Select **Another AWS account** as the trusted entity and provide the **Account ID** of the **DevOps account** where the GitLab runner is configured.
+4. Optionally, check **Require external ID** for additional security.
+5. Attach the required permissions that allow the role to perform actions in **Account A**, such as CloudFormation, EC2, and S3 permissions.
+6. Name the role something like `GitLabRunnerDeployRole-Dev`.
 
-Resources:
-  MyInstance:
-    Type: AWS::EC2::Instance
-    Properties:
-      InstanceType: !Ref InstanceType
-      KeyName: !Ref KeyName
-      SubnetId: !Ref MySubnet
-      ImageId: ami-0c55b159cbfafe1f0  # Update with a valid AMI ID
+### 1.2: Create IAM Role in Account B (Production)
 
-```
+Repeat the same steps as in Account A, but create the role in **Account B (Production)** with similar permissions, naming the role `GitLabRunnerDeployRole-Prod`.
 
-## GitLab CI/CD Configuration (.gitlab-ci.yml)
-The .gitlab-ci.yml is updated to pass the parameters JSON file during the deployment stage.
+## Step 2: Configure Trust Relationship for Each Role
 
+### 2.1: Configure Trust Relationship in Account A
 
-```
-stages:
-  - validate
-  - deploy
+1. In **Account A**, navigate to **IAM > Roles**.
+2. Select the role created in step 1 (`GitLabRunnerDeployRole-Dev`).
+3. Go to the **Trust Relationships** tab and update the trust relationship to allow the DevOps account to assume the role.
 
-variables:
-  AWS_REGION: "us-west-2"
-  STACK_NAME: "my-cloudformation-stack"
-  PARAMETERS_FILE: "parameters/dev-parameters.json" # Modify this for different environments
+### 2.2: Configure Trust Relationship in Account B
 
-validate_cloudformation:
-  stage: validate
-  image: amazon/aws-cli:latest
-  script:
-    - aws cloudformation validate-template --template-body file://cloudformation/network-stack.yml
-    - aws cloudformation validate-template --template-body file://cloudformation/app-stack.yml
-  only:
-    - main
+Repeat the same process in **Account B**, updating the trust relationship for the role `GitLabRunnerDeployRole-Prod` to allow the DevOps account to assume it.
 
-deploy_cloudformation:
-  stage: deploy
-  image: amazon/aws-cli:latest
-  script:
-    - chmod +x ./scripts/deploy-cloudformation.sh
-    - ./scripts/deploy-cloudformation.sh "network-stack.yml" $STACK_NAME $PARAMETERS_FILE
-  environment:
-    name: production
-  only:
-    - main
-```
+## Step 3: Create IAM Policy for GitLab Runner in the DevOps Account
 
-## Updated Deployment Script (deploy-cloudformation.sh)
-The script is updated to include the --parameters argument, which passes the parameter JSON file to the CloudFormation stack.
+1. Log in to the **DevOps account**.
+2. Navigate to **IAM > Policies** and create a new policy that grants permission to assume the roles in **Account A** and **Account B**.
+3. Attach this policy to the **IAM role** or **user** used by the GitLab runner.
 
-```
-#!/bin/bash
+## Step 4: Update GitLab CI/CD Pipeline with Role ARNs
 
-set -e
+1. In your GitLab pipeline, configure it to assume the correct roles using environment variables for **Development** and **Production** environments.
+2. Use the AWS CLI to automate the role assumption process based on the target environment.
 
-TEMPLATE_FILE=$1
-STACK_NAME=$2
-PARAMETERS_FILE=$3
+## Step 5: Test the Deployment
 
-if [ -z "$TEMPLATE_FILE" ] || [ -z "$STACK_NAME" ] || [ -z "$PARAMETERS_FILE" ]; then
-  echo "Usage: $0 <template-file> <stack-name> <parameters-file>"
-  exit 1
-fi
+1. Run a deployment targeting **Account A (Development)** and ensure that the GitLab runner can assume the `GitLabRunnerDeployRole-Dev` role and deploy resources successfully.
+2. Repeat the test for **Account B (Production)**, verifying that the GitLab runner assumes the `GitLabRunnerDeployRole-Prod` role.
 
-# Check if the stack already exists
-stack_exists=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --region $AWS_REGION --query "Stacks[0].StackStatus" --output text || echo "DOES_NOT_EXIST")
+If both tests pass, the cross-account role configuration is complete, and the GitLab runner can now deploy resources in both **Development** and **Production** accounts.
 
-if [ "$stack_exists" == "DOES_NOT_EXIST" ]; then
-  echo "Stack does not exist. Creating..."
-  aws cloudformation create-stack \
-    --stack-name $STACK_NAME \
-    --template-body file://cloudformation/$TEMPLATE_FILE \
-    --parameters file://$PARAMETERS_FILE \
-    --capabilities CAPABILITY_NAMED_IAM \
-    --region $AWS_REGION
+---
 
-  aws cloudformation wait stack-create-complete --stack-name $STACK_NAME --region $AWS_REGION
-else
-  echo "Stack exists. Updating..."
-  aws cloudformation update-stack \
-    --stack-name $STACK_NAME \
-    --template-body file://cloudformation/$TEMPLATE_FILE \
-    --parameters file://$PARAMETERS_FILE \
-    --capabilities CAPABILITY_NAMED_IAM \
-    --region $AWS_REGION
-
-  aws cloudformation wait stack-update-complete --stack-name $STACK_NAME --region $AWS_REGION
-fi
-
-echo "CloudFormation stack $STACK_NAME processed successfully."
-```
+This setup allows for a secure and efficient way for your GitLab runner to deploy resources across multiple AWS accounts.
 
