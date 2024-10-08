@@ -1,0 +1,19 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  InstanceType:
+    Description: "EC2 instance type"
+    Type: String
+    Default: "t2.micro"
+  KeyName:
+    Description: "KeyPair name for SSH access"
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "my-keypair"
+
+Resources:   
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !ImportValue MySubnetID
+      ImageId: ami-08d8ac128e0a1b91c

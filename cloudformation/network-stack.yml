@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  VpcCidr:
+    Description: "The CIDR block for the VPC"
+    Type: String
+    Default: "10.0.0.0/16"
+  SubnetCidr:
+    Description: "The CIDR block for the subnet"
+    Type: String
+    Default: "10.0.1.0/24"
+
+Resources:
+  MyVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: MyVPC
+
+  MySubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: !Ref SubnetCidr
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: MySubnet
+
+Outputs:
+  MySubnetOutput:
+    Value: !Ref MySubnet
+    Export:
+      Name: MySubnetID
