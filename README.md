@@ -19,21 +19,6 @@ The repository structure will now include a parameters folder where JSON files f
 
 ```
 
-## Sample Parameter JSON File 
-The JSON file defines parameters that will be injected into the CloudFormation stack during deployment. For example, here’s a dev-parameters.json file that provides values for the stack’s parameters:
-
-```
-{
-    "Parameters": {
-        "VpcCidr": "10.0.0.0/16",
-        "SubnetCidr": "10.0.1.0/24",
-        "InstanceType": "t2.micro",
-        "KeyName": "my-keypair"
-    }
-}
-```
-
-
 
 This guide explains how to configure cross-account roles for a GitLab runner in your DevOps AWS account to deploy resources in two different AWS accounts: **Account A (Development)** and **Account B (Production)**.
 
